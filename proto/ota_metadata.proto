@@ -1,0 +1,167 @@
+/*
+ * Copyright (C) 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// If you change this file,
+// Please update ota_metadata_pb2.py by executing
+// protoc ota_metadata.proto --python_out
+// $ANDROID_BUILD_TOP/build/tools/releasetools
+
+syntax = "proto3";
+
+package build.tools.releasetools;
+option optimize_for = LITE_RUNTIME;
+option java_multiple_files = true;
+
+// The build information of a particular partition on the device.
+message PartitionState {
+  string partition_name = 1;
+  repeated string device = 2;
+  repeated string build = 3;
+  // The version string of the partition. It's usually timestamp if present.
+  // One known exception is the boot image, who uses the kmi version, e.g.
+  // 5.4.42-android12-0
+  string version = 4;
+
+  // TODO(xunchang), revisit other necessary fields, e.g. security_patch_level.
+}
+
+// The build information on the device. The bytes of the running images are thus
+// inferred from the device state. For more information of the meaning of each
+// subfield, check
+// https://source.android.com/compatibility/android-cdd#3_2_2_build_parameters
+message DeviceState {
+  // device name. i.e. ro.product.device; if the field has multiple values, it
+  // means the ota package supports multiple devices. This usually happens when
+  // we use the same image to support multiple skus.
+  repeated string device = 1;
+  // device fingerprint. Up to R build, the value reads from
+  // ro.build.fingerprint.
+  repeated string build = 2;
+  // A value that specify a version of the android build.
+  int64 build_incremental = 3;
+  // The timestamp when the build is generated.
+  int64 timestamp = 4;
+  // The version of the currently-executing Android system.
+  string sdk_level = 5;
+  // A value indicating the security patch level of a build.
+  string security_patch_level = 6;
+
+  // The detailed state of each partition. For partial updates or devices with
+  // mixed build of partitions, some of the above fields may left empty. And the
+  // client will rely on the information of specific partitions to target the
+  // update.
+  repeated PartitionState partition_state = 7 [deprecated = true];
+
+  // HWID
+  string hw_id = 8;
+}
+
+message ApexInfo {
+  string package_name = 1;
+  int64 version = 2;
+  bool is_compressed = 3;
+  int64 decompressed_size = 4;
+  // Used in OTA
+  int64 source_version = 5;
+}
+
+// Just a container to hold repeated apex_info, so that we can easily serialize
+// a list of apex_info to string.
+message ApexMetadata {
+  repeated ApexInfo apex_info = 1;
+}
+
+message PropertyFiles {
+  // name of the file in package
+  string filename = 1;
+  // defines beginning of the file in package
+  int64 offset = 2;
+  // size of the file in package
+  int64 size = 3;
+}
+
+message PayloadProperties {
+  // hash of the file
+  string file_hash = 1;
+  // size of the file
+  int64 file_size = 2;
+  // hash of the metadata
+  string metadata_hash = 3;
+  // size of the metadata file
+  int64 metadata_size = 4;
+}
+
+message AbStreamingMetadata {
+  // payload properties of the build
+  PayloadProperties payload_properties = 1;
+  // name, offset and size of files
+  repeated PropertyFiles property_files = 2;
+}
+
+message AConfig {
+  // The required size of the cache partition, only valid for non-A/B update.
+  int64 required_cache = 1;
+}
+
+message AbConfig {
+  // if set true device will boot to a new slot, otherwise user manually switches slot on the screen
+  bool force_switch_slot = 1;
+}
+
+message InstallConfig {
+  // True if we need to wipe after the update.
+  bool wipe = 1;
+  // True if the ota that updates a device to support dynamic partitions, where
+  // the source build doesn't support it.
+  bool retrofit_dynamic_partitions = 2;
+}
+
+// The metadata of an OTA package. It contains the information of the package
+// and prerequisite to install the update correctly.
+message OtaMetadataV1 {
+  enum OtaType {
+    UNKNOWN = 0;
+    AB = 1;
+    BLOCK = 2;
+    BRICK = 3;
+  };
+  enum AbInstallType {
+    NON_STREAMING = 0;
+    STREAMING = 1;
+  }
+  // Filename of the file
+  string name = 1;
+  // https:// or file:// uri to update package (zip, xz, ...)
+  // Guaranteed to be https:// in this case
+  string url = 2;
+  // Changelog URL
+  string changelog_url = 3;
+  // Expected File Size in Bytes
+  int64 size_bytes = 4;
+
+  // OTA Type Metadata
+  OtaType type = 5;
+  // NON_STREAMING (from a local file) OR STREAMING (on the fly)
+  AbInstallType ab_install_type = 6;
+  // streaming_metadata is required only for streaming update
+  AbStreamingMetadata ab_streaming_metadata = 7;
+  // A/B (seamless) update configurations
+  AbConfig ab_config = 8;
+  // A-Only update configuration
+  AConfig a_config = 9;
+  // Installation configuration
+  InstallConfig install_config = 10;
+}
